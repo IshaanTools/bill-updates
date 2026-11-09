@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Client App Manager</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;padding:14px;max-width:760px;margin:auto}
+h1{font-size:20px}h2{font-size:16px;margin:0 0 8px}
+.card{background:#1e293b;border-radius:12px;padding:14px;margin-bottom:12px}
+input,textarea,select{width:100%;padding:10px;margin:4px 0 8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:14px}
+textarea{min-height:110px;font-family:monospace}
+button{background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:9px 12px;font-size:14px;margin:2px 2px 2px 0}
+button.g{background:#334155}button.r{background:#dc2626}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tag{font-size:12px;padding:2px 8px;border-radius:99px;background:#334155}
+.ok{background:#166534}.off{background:#991b1b}
+small{color:#94a3b8}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#000;padding:10px 16px;border-radius:8px;display:none;max-width:90%}
+</style></head><body>
+<h1>📱 Client App Manager</h1>
+
+<div class="card" id="setup">
+ <h2>1. GitHub Settings</h2>
+ <small>Use a repo with GitHub Pages enabled. Token: fine-grained, only this repo, "Contents: Read &amp; write".</small>
+ <input id="owner" placeholder="GitHub username">
+ <input id="repo" placeholder="Repo name (e.g. bill-updates)">
+ <input id="branch" placeholder="Branch (main)">
+ <input id="token" type="password" placeholder="GitHub token">
+ <button onclick="saveCfg()">Save &amp; Load Clients</button>
+</div>
+
+<div class="card">
+ <h2>2. Add Client</h2>
+ <input id="cName" placeholder="Client name (e.g. Sharma Traders)">
+ <button onclick="addClient()">Add Client</button>
+</div>
+
+<div class="card">
+ <h2>3. Publish Update</h2>
+ <select id="upId"></select>
+ <input type="file" id="upFile" accept=".html,text/html">
+ <textarea id="upText" placeholder="...or paste index.html here"></textarea>
+ <input id="upNote" placeholder="Update note (optional)">
+ <button onclick="publish()">🚀 Publish Update</button>
+</div>
+
+<h2>Clients</h2>
+<div id="list"></div>
+
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+let cfg=JSON.parse(localStorage.getItem('bm_cfg')||'{}');
+let clients=[],clientsSha=null;
+['owner','repo','branch','token'].forEach(k=>$(k).value=cfg[k]||(k==='branch'?'main':''));
+
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3500)}
+const enc=s=>{const b=new TextEncoder().encode(s);let x='';b.forEach(c=>x+=String.fromCharCode(c));return btoa(x)};
+const dec=b=>new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g,'')),c=>c.charCodeAt(0)));
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+
+async function gh(path,method='GET',body){
+  const url=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`+(method==='GET'?`?ref=${cfg.branch}&t=${Date.now()}`:'');
+  const r=await fetch(url,{method,headers:{Authorization:'Bearer '+cfg.token,Accept:'application/vnd.github+json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error((await r.json()).message||r.status);
+  return r.json();
+}
+async function putFile(path,content,msg){
+  const ex=await gh(path);
+  const r=await gh(path,'PUT',{message:msg,content:enc(content),branch:cfg.branch,sha:ex?ex.sha:undefined});
+  return r;
+}
+async function loadClients(){
+  const f=await gh('clients.json');
+  if(!f){clients=[];clientsSha=null}else{clients=JSON.parse(dec(f.content));clientsSha=f.sha}
+  render();
+}
+async function saveClients(msg){
+  const r=await gh('clients.json','PUT',{message:msg,content:enc(JSON.stringify(clients,null,2)),branch:cfg.branch,sha:clientsSha||undefined});
+  clientsSha=r.content.sha;render();
+}
+async function saveCfg(){
+  cfg={owner:$('owner').value.trim(),repo:$('repo').value.trim(),branch:$('branch').value.trim()||'main',token:$('token').value.trim()};
+  localStorage.setItem('bm_cfg',JSON.stringify(cfg));
+  try{await loadClients();toast('Connected ✔')}catch(e){toast('Error: '+e.message)}
+}
+async function addClient(){
+  const name=$('cName').value.trim();if(!name)return toast('Enter name');
+  const id=slug(name);if(clients.find(c=>c.id===id))return toast('Already exists');
+  try{
+    clients.push({id,name,version:0,updatedAt:null,active:true,message:'',notes:''});
+    await saveClients('Add client '+id);$('cName').value='';toast('Added. Now publish their first index.html');
+  }catch(e){clients.pop();toast(e.message)}
+}
+async function publish(){
+  const id=$('upId').value;const c=clients.find(x=>x.id===id);if(!c)return toast('Pick a client');
+  let html=$('upText').value;const f=$('upFile').files[0];
+  if(!html.trim()&&f)html=await f.text();
+  if(!html.trim())return toast('Select a file or paste HTML');
+  toast('Publishing...');
+  try{
+    await putFile(`apps/${id}/index.html`,html,`Update ${id} to v${c.version+1}`);
+    c.version++;c.updatedAt=new Date().toISOString();
+    const n=$('upNote').value.trim();if(n)c.notes=n;
+    await saveClients(`Bump ${id} v${c.version}`);
+    $('upText').value='';$('upFile').value='';$('upNote').value='';
+    toast(`Published v${c.version} ✔ (live in ~1-2 min)`);
+  }catch(e){toast('Error: '+e.message)}
+}
+async function toggle(id){const c=clients.find(x=>x.id===id);c.active=!c.active;try{await saveClients((c.active?'Enable ':'Disable ')+id)}catch(e){c.active=!c.active;toast(e.message)}}
+async function setMsg(id){
+  const c=clients.find(x=>x.id===id);const m=prompt('Banner message shown inside client app (blank = none):',c.message||'');
+  if(m===null)return;const old=c.message;c.message=m;
+  try{await saveClients('Message '+id)}catch(e){c.message=old;toast(e.message)}
+}
+async function removeClient(id){
+  if(!confirm('Remove '+id+' from list? (their app will stop updating)'))return;
+  const old=clients;clients=clients.filter(c=>c.id!==id);
+  try{await saveClients('Remove '+id)}catch(e){clients=old;toast(e.message)}
+}
+function loaderHtml(id){
+  const base=`https://${cfg.owner}.github.io/${cfg.repo}`;
+  const CFG=JSON.stringify({base,id});
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Loading</title></head>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div id="s">Loading...</div>
+<script>
+(async function(){
+var CFG=${CFG},K='bm_app_'+CFG.id,S=document.getElementById('s'),html=null,meta=null;
+function cached(){try{return JSON.parse(localStorage.getItem(K)||'null')}catch(e){return null}}
+try{
+  var r=await fetch(CFG.base+'/clients.json?t='+Date.now(),{cache:'no-store'});
+  if(!r.ok)throw 0;
+  var all=await r.json();meta=all.find(function(c){return c.id===CFG.id});
+  if(meta){
+    if(meta.active===false){S.innerHTML='<div style="text-align:center;padding:20px"><h3>Access paused</h3><p>'+(meta.message||'Please contact your app provider.')+'</p></div>';return}
+    var c=cached();
+    if(c&&c.v===meta.version){html=c.html}
+    else if(meta.version>0){
+      var a=await fetch(CFG.base+'/apps/'+CFG.id+'/index.html?v='+meta.version+'&t='+Date.now(),{cache:'no-store'});
+      if(!a.ok)throw 0;html=await a.text();
+      try{localStorage.setItem(K,JSON.stringify({v:meta.version,html:html}))}catch(e){}
+    }
+  }
+}catch(e){var c2=cached();if(c2)html=c2.html}
+if(!html){S.textContent='Connect to the internet to load the app for the first time.';return}
+document.open();document.write(html);document.close();
+if(meta&&meta.message&&meta.active!==false){
+  setTimeout(function(){var b=document.createElement('div');b.textContent=meta.message+'  (tap to close)';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;background:#facc15;color:#000;padding:8px;text-align:center;font:14px sans-serif;z-index:99999';
+  b.onclick=function(){b.remove()};document.body.appendChild(b)},300);
+}
+})();
+<\/script></body></html>`;
+}
+function dlLoader(id){
+  const blob=new Blob([loaderHtml(id)],{type:'text/html'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='index.html';a.click();
+  toast('Downloaded loader index.html for '+id);
+}
+function render(){
+  $('upId').innerHTML=clients.map(c=>`<option value="${c.id}">${c.name} (v${c.version})</option>`).join('');
+  $('list').innerHTML=clients.map(c=>`<div class="card">
+   <div class="row"><b>${c.name}</b><span class="tag ${c.active?'ok':'off'}">${c.active?'Active':'Paused'}</span></div>
+   <small>id: ${c.id} · v${c.version} · ${c.updatedAt?new Date(c.updatedAt).toLocaleString():'never published'}</small>
+   ${c.notes?`<div><small>📝 ${c.notes}</small></div>`:''}
+   ${c.message?`<div><small>💬 ${c.message}</small></div>`:''}
+   <div style="margin-top:8px">
+    <button class="g" onclick="toggle('${c.id}')">${c.active?'Pause':'Resume'}</button>
+    <button class="g" onclick="setMsg('${c.id}')">Banner msg</button>
+    <button onclick="dlLoader('${c.id}')">⬇ Loader index.html</button>
+    <button class="r" onclick="removeClient('${c.id}')">✕</button>
+   </div></div>`).join('')||'<small>No clients yet.</small>';
+}
+if(cfg.token)loadClients().catch(e=>toast(e.message));
+</script></body></html>
