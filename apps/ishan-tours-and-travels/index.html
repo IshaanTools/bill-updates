@@ -1531,7 +1531,7 @@ function rDuty(){
  <div class="km k4">${K("STARTING KM",g("sk"))}${K("CLOSING KM",g("ck"))}${K("EXTRA KM",g("xk"))}${K("TOTAL KM",tk?tk+" km":"")}</div>
  <div class="km k4">${K("STARTING TIME",g("st"))}${K("CLOSING TIME",g("ct"))}${K("EXTRA TIME",g("xt"))}${K("TOTAL TIME",g("tt"))}</div>
  <h3 class="dsec">CHARGES SUMMARY</h3>
- <table class="rtb chg ost"><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}${r[1]?`<small>${r[1]}</small>`:""}</td><td>${r[2]}</td><td>${r[3]}</td><td>${inr(r[4])}</td></tr>`).join("")}<tr class="gt"><td colspan="3">Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
+ <table class="rtb chg"><thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${inr(r[1])}</td></tr>`).join("")}<tr class="gt"><td>Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
  <p class="aw">Amount in Words: ${words(gt)} Rupees Only</p>
  ${sigBlk()}
  <div class="dbt"><div><h4>BANK DETAILS</h4><p><b>Account Name:</b> Zishan Akhtar Shaikh</p><p><b>Account Number:</b> 31564875947</p><p><b>IFSC Code:</b> SBIN0010786</p></div>
@@ -1562,8 +1562,9 @@ function rTrip(){
  <div class="route">${mid}</div>
  <div class="km k4">${K("TOTAL DAYS",days?String(days):"")}${K("RATE / KM",rate?"₹"+fr(rate):"")}${K("KM / DAY",kd?fr(kd)+" km":"")}${K("D.A / DAY",da?"₹"+fr(da):"")}</div>
  <p class="pkgl">${esc(rt)} Package: <b>₹${fr(rate)} × ${fr(kd)} km + ₹${fr(da)} D.A</b> = <b>${inr(perDay)}</b> per day${g("driver")?`<br>Driver: <b>${esc(g("driver"))}</b>`:""}</p>
+ ${!days?`<p class="no-print" style="margin:0 14px 10px;color:var(--r);font-weight:700;font-size:.85rem">⚠ Select a valid Start and End date (End must be on or after Start).</p>`:""}
  <h3 class="dsec">CHARGES SUMMARY</h3>
- <table class="rtb chg"><thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${inr(r[1])}</td></tr>`).join("")}<tr class="gt"><td>Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
+ <table class="rtb chg ost"><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}${r[1]?`<small>${r[1]}</small>`:""}</td><td>${r[2]}</td><td>${r[3]}</td><td>${inr(r[4])}</td></tr>`).join("")}<tr class="gt"><td colspan="3">Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
  <p class="aw">Amount in Words: ${words(gt)} Rupees Only</p>
  ${sigBlk()}
  ${btBlk()}
