@@ -195,11 +195,17 @@ section.on{break-after:avoid;page-break-after:avoid}
 .bto{margin:0 14px 6px!important;padding:6px 12px!important}
 .dfoot{margin-top:8px!important;padding:7px!important}
 }
+.ost{table-layout:auto}.ost th,.ost td{padding:9px 8px;text-align:right;vertical-align:middle}.ost th:first-child,.ost td:first-child{text-align:left}
+.ost td small{display:block;margin-top:3px;font-size:.72rem;font-weight:600;color:#5f7a70}
+.ost .gt td{text-align:right}.ost .gt td:first-child{text-align:left}
+.pkgl{margin:0 14px 12px;padding:9px 12px;border:1px dashed var(--gd);background:#fffaf0;font-size:.82rem;font-weight:600;color:var(--n2);line-height:1.5;text-align:center}.pkgl b{color:var(--nv)}
+@media(max-width:560px){.ost{font-size:.68rem}.ost th,.ost td{padding:7px 4px}.ost td small{font-size:.58rem}.pkgl{font-size:.7rem}}
 </style></head><body>
 <nav class="no-print">
 <button data-t="tracker">📅 MONTHLY BILL</button>
 <button data-t="invoice">🧾 INVOICE</button>
 <button data-t="duty">📝 DUTY INVOICE</button>
+<button data-t="tripinv">🧳 OUT-STATION INVOICE</button>
 <button data-t="home" class="act">🏠 HOME</button>
 </nav>
 <main>
@@ -225,6 +231,12 @@ section.on{break-after:avoid;page-break-after:avoid}
 <div class="card no-print"><h2>Duty invoice</h2><div class="grid" id="dform"></div>
 <div class="btns"><button class="b" onclick="print()">Print / Save as PDF</button><button class="b" onclick="sharePDF()">📤 Share PDF</button><button class="b g" onclick="newDuty()">New duty invoice</button></div></div>
 <div class="card rcwrap"><div class="rc duty" id="dv"></div></div>
+</section>
+
+<section id="tripinv">
+<div class="card no-print"><h2>Out-Station invoice (Package)</h2><div class="grid" id="pform"></div>
+<div class="btns"><button class="b" onclick="print()">Print / Save as PDF</button><button class="b" onclick="sharePDF()">📤 Share PDF</button><button class="b g" onclick="newTrip()">New out-station invoice</button></div></div>
+<div class="card rcwrap"><div class="rc duty" id="pv"></div></div>
 </section>
 
 <section id="tracker">
@@ -1519,7 +1531,7 @@ function rDuty(){
  <div class="km k4">${K("STARTING KM",g("sk"))}${K("CLOSING KM",g("ck"))}${K("EXTRA KM",g("xk"))}${K("TOTAL KM",tk?tk+" km":"")}</div>
  <div class="km k4">${K("STARTING TIME",g("st"))}${K("CLOSING TIME",g("ct"))}${K("EXTRA TIME",g("xt"))}${K("TOTAL TIME",g("tt"))}</div>
  <h3 class="dsec">CHARGES SUMMARY</h3>
- <table class="rtb chg"><thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${inr(r[1])}</td></tr>`).join("")}<tr class="gt"><td>Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
+ <table class="rtb chg ost"><thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}${r[1]?`<small>${r[1]}</small>`:""}</td><td>${r[2]}</td><td>${r[3]}</td><td>${inr(r[4])}</td></tr>`).join("")}<tr class="gt"><td colspan="3">Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
  <p class="aw">Amount in Words: ${words(gt)} Rupees Only</p>
  ${sigBlk()}
  <div class="dbt"><div><h4>BANK DETAILS</h4><p><b>Account Name:</b> Zishan Akhtar Shaikh</p><p><b>Account Number:</b> 31564875947</p><p><b>IFSC Code:</b> SBIN0010786</p></div>
@@ -1529,6 +1541,37 @@ function rDuty(){
 function newDuty(){$$("#dform input").forEach(i=>{i.value="";delete i.dataset.m});$("#d_pkg").value="8 Hrs / 80 Km";setRates();bump("dsc");$("#d_no").value=peek("dsc","DS-");$("#d_date").value=today();rDuty()}
 $$("#dform input").forEach(i=>i.oninput=rDuty);
 $("#d_no").value=peek("dsc","DS-");$("#d_date").value=today();rDuty();
+
+
+/* TRIP INVOICE (multi-day package: rate/km x km/day + D.A/day) */
+$("#pform").innerHTML=F("p",[["no","Bill No."],["date","Bill Date","date"],["cust","Customer Name"],["from","From"],["to","To (Destination)"],["cab","Cab No."],["driver","Driver Name"],["sd","Trip Start Date","date"],["ed","Trip End Date","date"],["rate","Rate per Km (Rs.)","number"],["kmd","Km per Day","number"],["da","Driver Allowance per Day (Rs.)","number"],["akm","Actual Km Run (optional)","number"],["toll","Toll / Parking (Rs.)","number"]])+'<label>Trip Type<select id="p_type"><option>Round Trip</option><option>One Way</option></select></label>';
+(function(){const el=$("#p_cab");el.style.textTransform="uppercase";el.addEventListener("input",()=>{const a=el.selectionStart,b=el.selectionEnd,u=el.value.toUpperCase();if(u!==el.value){el.value=u;try{el.setSelectionRange(a,b)}catch(e){}}})})();
+const pkgDef=()=>{$("#p_rate").value=ls.get("trip_rate")||"15";$("#p_kmd").value=ls.get("trip_kmd")||"300";$("#p_da").value=ls.get("trip_da")||"300"};pkgDef();
+[["rate","trip_rate"],["kmd","trip_kmd"],["da","trip_da"]].forEach(([k,key])=>$("#p_"+k).addEventListener("input",e=>ls.set(key,e.target.value)));
+function rTrip(){
+ const g=k=>$("#p_"+k).value,pd=t=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(t||"");return m?Date.UTC(+m[1],m[2]-1,+m[3]):null};
+ const a=pd(g("sd")),b=pd(g("ed")),days=a!=null&&b!=null&&b>=a?Math.round((b-a)/864e5)+1:0;
+ const rate=n(g("rate")),kd=n(g("kmd")),da=n(g("da")),pk=days*kd,ak=n(g("akm")),bk=Math.max(pk,ak),fr=x=>Number.isInteger(x)?x:x.toFixed(2);
+ const kmc=bk*rate,dac=days*da,toll=n(g("toll")),gt=kmc+dac+toll,perDay=kd*rate+da;
+ const kl=ak>pk?`[${fr(bk)} km × ₹${fr(rate)}/km]`:`[${days} day${days==1?"":"s"} × ${fr(kd)} km × ₹${fr(rate)}/km]`;
+ const dl=days+" day"+(days==1?"":"s"),rows=[["Kilometer Charges",ak>pk?`Actual run, min ${fr(pk)} km`:`${dl} × ${fr(kd)} km`,fr(bk)+" km","₹"+fr(rate)+" / km",kmc],["Driver Allowance [D.A]","Per day allowance",dl,"₹"+fr(da)+" / day",dac],["Toll / Parking Charges","","—","—",toll]];
+ const K=(x,y,c)=>`<div${c?` class="${c}"`:""}><small>${x}</small><b>${esc(y)||"—"}</b></div>`,rt=g("type")||"Round Trip";
+ const mid=rt==="Round Trip"?`${K("FROM",g("from"))}<i>➜</i>${K("TO",g("to"))}<i>➜</i>${K("RETURN",g("from"))}`:`${K("FROM",g("from"))}<i>➜</i>${K("TO",g("to"))}`;
+ $("#pv").innerHTML=RH()+`<div class="dtitle"><span>OUT-STATION INVOICE</span><div>Bill No: <b>${esc(g("no"))||"---"}</b> &nbsp;|&nbsp; Bill Date: <b>${esc(fd(g("date")))}</b></div></div>
+ <div class="dgrid">${K("CUSTOMER NAME",g("cust"))}${K("CAB NO.",g("cab").toUpperCase())}${K("START DATE",fd(g("sd")))}${K("END DATE",fd(g("ed")))}</div>
+ <div class="route">${mid}</div>
+ <div class="km k4">${K("TOTAL DAYS",days?String(days):"")}${K("RATE / KM",rate?"₹"+fr(rate):"")}${K("KM / DAY",kd?fr(kd)+" km":"")}${K("D.A / DAY",da?"₹"+fr(da):"")}</div>
+ <p class="pkgl">${esc(rt)} Package: <b>₹${fr(rate)} × ${fr(kd)} km + ₹${fr(da)} D.A</b> = <b>${inr(perDay)}</b> per day${g("driver")?`<br>Driver: <b>${esc(g("driver"))}</b>`:""}</p>
+ <h3 class="dsec">CHARGES SUMMARY</h3>
+ <table class="rtb chg"><thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${inr(r[1])}</td></tr>`).join("")}<tr class="gt"><td>Grand Total</td><td>${inr(gt)}</td></tr></tbody></table>
+ <p class="aw">Amount in Words: ${words(gt)} Rupees Only</p>
+ ${sigBlk()}
+ ${btBlk()}
+ <div class="dfoot">${esc(C.tag)}</div>`;
+}
+function newTrip(){$$("#pform input").forEach(i=>i.value="");pkgDef();bump("tic");$("#p_no").value=peek("tic","TI-");$("#p_date").value=today();$("#p_sd").value=$("#p_ed").value=today();$("#p_type").value="Round Trip";rTrip()}
+$$("#pform input,#pform select").forEach(i=>{i.oninput=rTrip;i.onchange=rTrip});
+$("#p_no").value=peek("tic","TI-");$("#p_date").value=today();$("#p_sd").value=$("#p_ed").value=today();
 
 /* FIT INVOICE + DUTY INVOICE ON ONE PAGE WHEN PRINTING */
 function fitOne(){["iv","dv"].forEach(id=>{const e=document.getElementById(id);if(!e)return;e.style.zoom="";if(!e.offsetWidth)return;const mx=e.offsetWidth*285/198,h=e.scrollHeight;if(h>mx)e.style.zoom=(mx/h*.96).toFixed(3)})}
@@ -1564,11 +1607,12 @@ function addTrip(){
 $("#rc").onclick=e=>{const x=e.target.dataset.x;if(x){V.trips=V.trips.filter(t=>t.id!=x);sv();rRc()}};
 function clearAll(){if(!confirm("Clear all trips and billing details?"))return;V={client:"",no:"",date:today(),trips:[]};sv();$("#v_client").value="";$("#v_no").value="";$("#v_date").value=V.date;rRc()}
 rRc();
+rTrip();
 </script><script>/* Print: shrink the bill to fit ONE A4 page, and make "Print / Save PDF" work inside the Android app */
 (function(){
 var W=718,H=1020,cur=null,T0=document.title;
 function pdfName(){
- var id=(document.querySelector("section.on")||{}).id,m={invoice:["i_cust","i_date"],duty:["d_cust","d_date"],tracker:["v_client","v_date"]}[id];
+ var id=(document.querySelector("section.on")||{}).id,m={invoice:["i_cust","i_date"],duty:["d_cust","d_date"],tracker:["v_client","v_date"],tripinv:["p_cust","p_sd"]}[id];
  if(!m)return T0;
  var nm=(document.getElementById(m[0])||{}).value||"",dt=(document.getElementById(m[1])||{}).value||"";
  nm=nm.replace(/[\\\/:*?"<>|]/g,"").replace(/\s+/g,"");
